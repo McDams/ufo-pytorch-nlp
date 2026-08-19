@@ -1,0 +1,24 @@
+# Environnements Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Données brutes et résultats lourds
+data/*.csv
+!data/.gitkeep
+
+outputs/*
+!outputs/.gitkeep
+
+models/*
+!models/.gitkeep
+
+# Notebooks et éditeurs
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# Fichiers locaux
+.env
+.DS_Store
