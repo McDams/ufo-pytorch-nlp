@@ -416,3 +416,90 @@ rien dans le vocabulaire de surface ne porte l'idée de **changement au cours
 du temps** que porte la forme réelle `changing` — un concept narratif, pas un
 objet statique nommable par un mot isolé. Un modèle qui moyenne des embeddings
 de mots n'a structurellement aucune prise dessus.
+
+## Phase 10 — Chaque mot interroge les autres
+
+Mécanisme d'attention codé à la main (tenseurs, produit matriciel, softmax,
+couches linéaires — rien d'autre), sur un vrai relevé contenant une reprise :
+`« Oval shaped with lights all around it in a haze with several smaller
+lights flying all around it. »` (18 jetons, `it` en positions 6 et 17).
+
+Trois vecteurs par mot (question, étiquette, contenu) via trois couches
+linéaires sans biais, puis `scores = Q @ Kᵀ / √d`, `poids = softmax(scores)`,
+`sortie = poids @ V`.
+
+| Vérification | Résultat |
+|---|---|
+| Chaque ligne de la matrice somme à 1 | ✅ |
+| La sortie a la même forme que l'entrée | ✅ (18, 32) |
+| Position du mot sur lequel s'appuie le plus chaque `it` | désignée dans le notebook |
+
+Le modèle n'est pas entraîné (poids aléatoires) : la case désignée n'a pas de
+raison de correspondre à `oval`, le mot que `it` reprend réellement. Ce qui
+est démontré ici, c'est que le mécanisme sait pointer une case précise pour
+cette question, pas qu'il a déjà appris la bonne réponse.
+
+## Phase 11 — Le Conseil mélange vos mots
+
+Sur ce même relevé, permutation aléatoire des positions puis réalignement de
+la sortie mélangée dans l'ordre d'origine (chaque mot remis à sa place de
+départ) :
+
+| Mesure | Avant encodage de position | Après |
+|---|---:|---:|
+| Écart max., sortie correcte vs sortie mélangée-réalignée | 8,9 × 10⁻⁸ (nul aux erreurs de calcul flottant près) | **0,139** |
+
+Le mécanisme d'attention lui-même n'a pas été touché : c'est un encodage de
+position sinusoïdal, ajouté aux vecteurs d'entrée **avant** qu'ils ne
+deviennent question/étiquette/contenu, qui casse l'invariance à l'ordre.
+Injecté avant les trois projections, il infuse les trois rôles à la fois ;
+injecté après (sur la sortie déjà calculée), il n'aurait rien réparé, puisque
+les poids d'attention auraient déjà été calculés sans lui.
+
+## Phase 12 — Le Conseil demande la facture
+
+Chronométrage de l'attention de la phase 11 (inchangée), 50 mesures par
+longueur, médiane retenue :
+
+| Longueur | Temps médian | Taille de la matrice de poids |
+|---:|---:|---:|
+| 32 | 0,292 ms | 1 024 cases |
+| 64 | 0,355 ms | 4 096 cases |
+| 128 | 0,477 ms | 16 384 cases |
+| 256 | 0,569 ms | 65 536 cases |
+| 512 | 2,028 ms | 262 144 cases |
+
+La taille de la matrice quadruple exactement à chaque doublement de longueur
+(propriété géométrique en longueur²). Le temps mesuré, lui, ne suit ce facteur
+4 qu'au tout dernier doublement (256 → 512, ×3,57) : en dessous, le temps d'un
+passage est dominé par la latence fixe de Python/PyTorch, pas par le calcul —
+les doublements précédents donnent ×1,22, ×1,34 et ×1,19, loin de 4.
+
+**Conclusion honnête** : à cette taille de modèle (`D_MODEL = 32`, une tête),
+un simple passage avant ne devient jamais « inutilisable » aux longueurs
+testées — l'extrapolation en longueur² donne encore moins de 500 ms à 8 000
+jetons. Ce qui limiterait réellement un entraînement à cette échelle, ce
+n'est pas le chronomètre d'un passage isolé, c'est ce même coût répété à
+chaque exemple et chaque époque, et surtout la mémoire nécessaire pour
+conserver la matrice de poids en vue de la rétropropagation. Pour cette
+transmission (55 jetons au maximum), la question ne se pose de toute façon
+pas.
+
+## Phase 13 — Deux regards sur le même relevé
+
+Deux têtes d'attention (16 dimensions chacune, initialisations différentes)
+sur le même relevé, sorties concaténées puis recombinées par une couche
+linéaire (32, 18) → (32, 18) inchangée en forme.
+
+| Mesure (écart absolu moyen entre les deux matrices) | Valeur |
+|---|---:|
+| Têtes réelles (initialisations différentes) | 0,0205 |
+| Cas de contrôle (deux têtes strictement identiques) | 0,0000 |
+
+Le cas de contrôle confirme que le désaccord mesuré n'est pas un artefact de
+la méthode : deux têtes identiques donnent un désaccord nul. Les têtes 1 et 2
+ne sont pas entraînées, leur différence vient uniquement de l'initialisation
+aléatoire — pas encore d'une spécialisation apprise. Avec un entraînement, on
+pourrait vérifier si chaque tête se stabilise sur un type de relation
+particulier (sujet-verbe, reprise pronominale) d'un relevé à l'autre.
+de mots n'a structurellement aucune prise dessus.
