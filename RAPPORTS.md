@@ -502,4 +502,156 @@ ne sont pas entraînées, leur différence vient uniquement de l'initialisation
 aléatoire — pas encore d'une spécialisation apprise. Avec un entraînement, on
 pourrait vérifier si chaque tête se stabilise sur un type de relation
 particulier (sujet-verbe, reprise pronominale) d'un relevé à l'autre.
+
+## Phase 14 — Le cerveau emprunté, et sa facture
+
+### Choix et budget
+
+Modèle emprunté : `distilbert-base-uncased` (66 362 880 paramètres, HuggingFace,
+libre). Un passage complet avant + arrière sur cette machine coûte environ
+1,3 s par lot de 16 (contre 0,2 s pour un passage avant seul, encodeur gelé) :
+sur les 58 541 exemples complets, un seul régime aurait coûté plus de deux
+heures. Décision : les trois régimes tournent sur un sous-échantillon
+stratifié fixe de 1 500 relevés d'entraînement / 500 de validation, texte
+expurgé du vocabulaire des formes (phase 8), même découpe.
+
+### Trois régimes, un seul modèle de départ
+
+| Régime | Accuracy | Paramètres entraînables | Part du modèle | Poids à sauvegarder |
+|---|---:|---:|---:|---:|
+| 1 — poids gelés + tête | 29,4 % | 15 380 | 0,02 % | 0,06 Mo |
+| 2 — 2 dernières couches dégelées, LR différentiel | **32,0 %** | 14 191 124 | 21,4 % | 54,1 Mo |
+| 3 — LoRA (rang 4, sur `q_lin`/`v_lin`) | 31,4 % | 89 108 | 0,13 % | 0,34 Mo |
+| *Repère : `EmbeddingBag` (phase 3), même sous-échantillon* | 30,4 % | — | — | — |
+| *Référence : phase 8, jeu complet* | 37,07 % | — | — | — |
+
+### Verdict
+
+Le régime 2 gagne l'accuracy dans l'absolu, mais à un coût de stockage
+(54,1 Mo) sans commune mesure avec les deux autres. Le régime 3 (LoRA)
+obtient 95 % du gain du régime 2 (31,4 % contre 32,0 %) pour **0,6 % de son
+poids à sauvegarder** (0,34 Mo contre 54,1 Mo) et 160 fois moins de paramètres
+réellement modifiés. C'est ce que le Bureau devrait retenir : LoRA est le
+meilleur compromis coût/score de cette phase, pas le régime le plus précis
+dans l'absolu.
+
+## Phase 15 — Le Conseil pose des questions, vous citez vos sources
+
+### Architecture : deux étages, jamais de génération libre
+
+1. **TF-IDF** sur les 88 644 relevés au commentaire non vide — index construit
+   une fois, interrogé en une fraction de seconde, ramène 50 candidats.
+2. **Reclassement sémantique** de ces 50 candidats avec le modèle emprunté de
+   la phase 14 (embeddings `[CLS]`).
+
+La réponse est construite par un gabarit qui n'agrège que ce que les relevés
+cités contiennent réellement (comptage de formes, citations mot pour mot) —
+elle ne peut pas, par construction, inventer une affirmation que ses sources
+ne soutiennent pas.
+
+### Un bug de langue, trouvé et corrigé avant la mesure finale
+
+Un premier essai avec des questions en français donnait des scores de
+pertinence artificiellement élevés (0,93-0,96 partout) et ramenait
+systématiquement les mêmes relevés hors sujet, quelle que soit la question.
+Cause : le corpus est très majoritairement anglophone (70 293 relevés `us`
+sur 88 644), tout comme le modèle emprunté. Les questions ont été traduites
+en anglais — même sens, langue du corpus — avant toute mesure sérieuse.
+
+### Résultat, verdict manuel question par question
+
+| # | Thème | Verdict |
+|---|---|---|
+| 1 | Zones habitées → forme particulière | Partiellement sourcée |
+| 2 | Ce que décrivent les témoins qui parlent de bruit | Mal sourcée |
+| 3 | Plusieurs objets à la fois | Correctement sourcée |
+| 4 | Couleurs des lumières observées | Partiellement sourcée |
+| 5 | Objets triangulaires : rapides ou lents | Partiellement sourcée |
+| 6 | Même forme observée ailleurs le même jour | Correctement sourcée |
+
+**Proportion strictement correcte : 2/6 (33 %) ; en comptant les réponses
+partiellement soutenues : 5/6 (83 %).** Les deux réponses les plus faibles (1
+et 4) portent sur un **attribut** (zone habitée, couleur) plutôt que sur un
+mot-clé central de la question — le double étage privilégie les relevés qui
+partagent beaucoup de mots avec la question, pas nécessairement ceux qui
+répondent le mieux à sa nuance précise. Déterminisme vérifié : la même
+question posée deux fois ramène toujours les mêmes citations.
+
+## Phase 16 — Faire entrer le tout dans le vaisseau
+
+### Marge annoncée avant toute optimisation
+
+**Marge acceptée : 2 points d'accuracy**, écrite avant la première cellule
+d'optimisation de la phase (section 6 du notebook).
+
+### Avant / après
+
+| Étape | Poids | Latence (1 relevé) | Débit (lot de 16) | Accuracy |
+|---|---:|---:|---:|---:|
+| Avant (régime 2, phase 14, réentraîné) | 253,3 Mo | 63,2 ms | 26,6/s | 28,0 % |
+| Quantifié (dynamique, int8) | 131,7 Mo | 88,3 ms | 45,4/s | 29,4 % |
+| Quantifié + TorchScript (livré) | **132,0 Mo** | **56,2 ms** | — | — |
+
+Facteur de poids : ×1,92. Facteur de latence (système livré vs avant) : ×1,12.
+Chute d'accuracy : −1,4 point (négative : l'accuracy a en fait légèrement
+augmenté après quantization, dans la marge acceptée).
+
+### Ce que la mesure a révélé
+
+La quantization dynamique **seule** dégrade la latence d'une réponse unique
+(63,2 ms → 88,3 ms) alors qu'elle réduit le poids et améliore le débit —
+exactement l'avertissement de l'énoncé : la latence d'une réponse unique et
+le débit ne varient pas ensemble. Cause probable : la conversion int8/float
+des activations a un coût fixe par appel, non amorti à lot = 1. C'est
+l'export **TorchScript** par-dessus le modèle quantifié qui corrige la
+latence unitaire (88,3 ms → 56,2 ms) en figeant le graphe de calcul. Le
+système réellement livré est quantifié *et* scripté ensemble — ni l'un ni
+l'autre seul n'aurait suffi.
+
+### Où on s'est arrêté
+
+La distillation (entraîner un modèle beaucoup plus petit à reproduire les
+sorties du modèle emprunté) n'a pas été tentée : elle demande un
+entraînement à part entière, pas une transformation post-hoc, et le budget de
+calcul de cette machine était déjà largement sollicité par les phases
+précédentes.
+
+## Phase 17 — Le faux témoignage
+
+### Changement de modèle, et pourquoi
+
+`distilbert-base-uncased` (phase 14) est un encodeur sans capacité de
+génération. Cette phase emprunte donc `distilgpt2` (82 M de paramètres,
+décodeur autorégressif) — même esprit (petit, libre, CPU), bonne famille
+d'architecture pour choisir un mot après l'autre. Aucun poids n'est modifié
+(empreinte SHA-256 des paramètres identique avant/après, vérifiée par le
+code).
+
+### Les deux échecs, et la recherche méthodique du réglage
+
+Une amorce neutre (« I was ») dérivait systématiquement vers du contenu
+générique (sport, actualité) — sans rapport avec des témoignages d'OVNI :
+`distilgpt2` n'a jamais vu la transmission. Correction, légitime puisqu'elle
+ne touche à aucun poids : chaque génération est amorcée par les 3-4 premiers
+mots d'un vrai relevé, tirés au hasard dans un petit lot d'amorces réelles.
+
+Recherche méthodique du réglage par une mesure objective — le taux de
+répétition de trigrammes, comparé à l'étalon mesuré sur de vrais relevés
+(0,00025) : température quasi nulle → texte qui boucle (« I was really
+excited about it. » répété 4 fois) ; température 2,0 → dérive incohérente.
+Température retenue : **1,1**, la plus basse dont le taux de répétition
+rejoint celui des vrais relevés (0,0 contre 0,00025).
+
+### Test en aveugle : 10 / 10, un échec révélateur
+
+5 faux mélangés à 5 vrais, triés par l'auteur du rapport sans consulter la
+clé de réponse avant d'écrire les 10 verdicts (limite reconnue : pas un tiers
+extérieur au projet). **10 relevés sur 10 correctement classés.** Le test
+échoue à démontrer que les faux sont indiscernables : chaque faux porte une
+trace reconnaissable — une dérive de sujet en fin de génération (un faux
+dérive vers un stand SEGA Mobile à Tokyo), une incohérence locale, ou un mot
+inventé (« Flying-Stereogies »). La grille de température optimisait un seul
+critère mesurable (la boucle) qui ne dit rien sur l'autre échec (la dérive
+sémantique) : `distilgpt2`, généraliste, dérive presque toujours après une
+vingtaine de jetons dès qu'il quitte le sillage de l'amorce réelle.
 de mots n'a structurellement aucune prise dessus.
