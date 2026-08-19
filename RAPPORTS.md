@@ -50,3 +50,68 @@ La courbe annuelle obtenue avec `datetime` ne montre pas une croissance continue
 jusqu'à la fin : le volume baisse notamment en 2013 et en 2014. Cette baisse
 est cohérente avec une date d'observation où les dernières années sont
 incomplètes, mais elle ne reproduit pas le raisonnement du dossier. 
+
+## Phase 1 — Le chiffre était vrai, la flotte est perdue
+
+### 1. Ce que disait réellement le chiffre du 4 juillet
+
+Le chiffre du 4 juillet mesure uniquement un volume de signalements : il indique
+qu'un grand nombre de personnes ont envoyé un relevé ce jour-là. Il ne permet pas
+de savoir ce qu'elles ont vu, si leurs observations se ressemblent, si elles sont
+inquiétantes, ou si elles correspondent à une même apparition observée par de
+nombreux témoins.
+
+L'interprétation du dossier est possible, mais elle n'est pas la seule. Un pic
+peut aussi être lié aux feux d'artifice et à des lumières inhabituelles dans le
+ciel, à une activité collective plus importante lors d'un jour férié, ou à un
+effet de déclaration : les témoins peuvent être davantage disponibles et
+motivés pour écrire un signalement ce jour-là. Le même volume de relevés peut
+donc recouvrir des contenus complètement différents.
+
+Un comptage répond à la question « combien de personnes ont signalé quelque
+chose ce jour-là ? ». Il ne répond pas à la question « qu'ont-elles décrit,
+quelle forme ont-elles observée et quels indices ont-elles donnés dans leur
+témoignage ? ».
+
+### 2. Trois témoignages que le comptage ne voit pas
+
+**Relevé 1 — Boulder, États-Unis, 3 octobre 2005, forme `chevron`**
+
+> Low flying&#44 silent&#44 muted white lights on a chevron shaped glider
+
+Ce texte apporte des informations absentes d'un comptage : l'objet est décrit
+comme volant bas, silencieux, composé de lumières blanches atténuées et ayant
+une forme de chevron.
+
+**Relevé 2 — Missoula, États-Unis, 17 octobre 2003, forme `circle`**
+
+> there was a haze around object
+
+Ce témoignage est très court, mais il décrit une brume ou un halo autour de
+l'objet. Un simple nombre de signalements ne permet pas de distinguer ce type
+d'indice visuel d'une observation de lumières, d'un bruit ou d'une forme
+géométrique.
+
+**Relevé 3 — Jefferson City, États-Unis, 16 octobre 2000, forme `triangle`**
+
+> Silent triangle object&#44 very low&#44 moving north then east.
+
+Ce relevé indique une forme triangulaire, l'absence de bruit, une faible
+altitude et une trajectoire orientée d'abord vers le nord puis vers l'est. Ces
+détails permettent de caractériser l'observation, alors qu'un comptage ne
+conserve que le fait qu'un relevé a été envoyé.
+
+### 3. Commande passée au Conseil
+
+La tâche retenue est une classification supervisée de texte : **à partir du
+commentaire écrit par un témoin dans la colonne `comments`, le système doit
+prédire la forme observée dans la colonne `shape`.**
+
+- Entrée : le texte brut du témoignage.
+- Sortie : une classe de forme, par exemple `light`, `triangle`, `circle` ou
+  `fireball`.
+
+Le jeu contient 88 679 relevés chargés, dont 35 commentaires vides. La colonne
+`shape` contient 2 922 valeurs manquantes et 29 formes distinctes non vides.
+Les classes les plus fréquentes sont `light` avec 17 872 relevés, `triangle`
+avec 8 489 relevés et `circle` avec 8 453 relevés. 
