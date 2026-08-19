@@ -115,3 +115,72 @@ Le jeu contient 88 679 relevés chargés, dont 35 commentaires vides. La colonne
 `shape` contient 2 922 valeurs manquantes et 29 formes distinctes non vides.
 Les classes les plus fréquentes sont `light` avec 17 872 relevés, `triangle`
 avec 8 489 relevés et `circle` avec 8 453 relevés. 
+
+## Phase 2 — Le test d'acceptation du Bureau
+
+### Objectif du test
+
+Avant d'entraîner un modèle sur l'ensemble de la transmission, un test
+d'acceptation a été réalisé sur huit relevés réels. Le modèle reçoit un
+témoignage textuel et doit prédire sa forme observée.
+
+Le test ne cherche pas à mesurer la généralisation. Les huit relevés utilisés
+pour l'entraînement sont aussi ceux utilisés pour l'évaluation. Son unique but
+est de vérifier que le montage PyTorch peut apprendre : préparation du texte,
+vocabulaire, encodage des classes, passage avant, calcul de la perte,
+rétropropagation, mise à jour des poids et prédiction finale.
+
+### Montage utilisé
+
+Le modèle est composé :
+
+- d'une couche `EmbeddingBag` qui transforme les mots du témoignage en vecteurs
+  puis calcule une représentation moyenne du texte ;
+- d'une couche linéaire qui produit un score pour chaque forme ;
+- d'une fonction de perte `CrossEntropyLoss` ;
+- d'un optimiseur Adam avec un taux d'apprentissage de 0,05.
+
+Les huit formes retenues sont : `cigar`, `circle`, `disk`, `fireball`, `light`,
+`oval`, `sphere` et `triangle`. 
+
+### Résultat du test
+
+| Indicateur | Valeur |
+|---|---:|
+| Nombre de relevés | 8 |
+| Nombre de classes | 8 |
+| Nombre d'itérations nécessaires | 2 |
+| Perte initiale | 2,049 |
+| Perte finale | 1,269 |
+| Prédictions correctes finales | 8 / 8 |
+| Test accepté | Oui |
+
+La perte diminue de 2,049 à 1,269 en deux itérations. Les huit prédictions sont
+correctes : le montage a donc réussi à mémoriser les huit exemples soumis.
+
+### Prédictions finales
+
+| Forme réelle | Forme prédite | Résultat |
+|---|---|---|
+| `cigar` | `cigar` | Correct |
+| `circle` | `circle` | Correct |
+| `disk` | `disk` | Correct |
+| `fireball` | `fireball` | Correct |
+| `light` | `light` | Correct |
+| `oval` | `oval` | Correct |
+| `sphere` | `sphere` | Correct |
+| `triangle` | `triangle` | Correct |
+
+Les huit exemples utilisés sont des témoignages réels de la transmission. Les
+probabilités associées à la classe prédite ne sont pas encore toutes élevées,
+mais la classe ayant le score maximal est correcte pour chaque relevé. Cela est
+suffisant pour le test d'acceptation. 
+
+### Interprétation
+
+Ce test prouve que le pipeline de classification fonctionne techniquement et que
+le réseau peut réduire sa perte puis mémoriser les exemples qu'il reçoit.
+
+En revanche, il ne prouve pas que le modèle reconnaîtra correctement la forme
+de nouveaux témoignages. Il n'y a ici ni découpe train/test, ni validation, ni
+mesure honnête de généralisation. Ces éléments seront introduits à la phase 3.
